@@ -4,14 +4,14 @@ import json
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from PIL import Image
-import tensorflow as tf
+import tflite_runtime.interpreter as tflite
 
 app = Flask(__name__)
 CORS(app)
 
 # تحميل النموذج الخفيف TFLite
 # تأكد أن اسم الملف في GitHub هو بالضبط model.tflite
-interpreter = tf.lite.Interpreter(model_path="model.tflite")
+interpreter = tflite.Interpreter(model_path="model.tflite")
 interpreter.allocate_tensors()
 
 input_details = interpreter.get_input_details()
