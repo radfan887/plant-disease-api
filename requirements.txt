@@ -3,4 +3,4 @@ flask-cors
 numpy
 Pillow
 gunicorn
-tensorflow
+tflite-runtime
