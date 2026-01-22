@@ -4,20 +4,27 @@ import json
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from PIL import Image
-import tensorflow as tf
+import tflite_runtime.interpreter as tflite
 
 app = Flask(__name__)
 CORS(app)
 
 # تحميل النموذج الخفيف TFLite
-# تأكد أن اسم الملف في GitHub هو بالضبط model.tflite
-interpreter = tf.lite.Interpreter(model_path="model.tflite")
-interpreter.allocate_tensors()
+# تأكد أن ملف النموذج في GitHub باسم model.tflite
+try:
+    interpreter = tflite.Interpreter(model_path="model.tflite")
+    interpreter.allocate_tensors()
+    input_details = interpreter.get_input_details()
+    output_details = interpreter.get_output_details()
+    print("✅ تم تحميل نموذج TFLite بنجاح")
+except Exception as e:
+    print(f"❌ خطأ في تحميل النموذج: {e}")
 
-input_details = interpreter.get_input_details()
-output_details = interpreter.get_output_details()
+# تحميل بيانات العلاج (تأكد من وجود الملف في GitHub)
+with open('treatments.json', 'r', encoding='utf-8') as f:
+    treatments_data = json.load(f)
 
-# قائمة الفئات بالترتيب الصحيح (يجب أن تطابق ترتيب التدريب)
+# قائمة الفئات بالترتيب الذي تدرب عليه النموذج
 CLASS_NAMES = [
     'Pepper__bell___Bacterial_spot', 'Pepper__bell___healthy', 
     'Potato___Early_blight', 'Potato___Late_blight', 'Potato___healthy', 
@@ -28,26 +35,23 @@ CLASS_NAMES = [
     'Tomato_healthy'
 ]
 
-# تحميل بيانات العلاج
-with open('treatments.json', 'r', encoding='utf-8') as f:
-    treatments_data = json.load(f)
-
 @app.route('/', methods=['GET'])
-def home():
-    return jsonify({"status": "active", "message": "Plant Doctor API is running"})
+def health_check():
+    return jsonify({"status": "online", "message": "Plant Doctor API is ready!"})
 
 @app.route('/predict', methods=['POST'])
 def predict():
+    if 'image' not in request.files:
+        return jsonify({"error": "No image found"}), 400
+    
     try:
-        if 'image' not in request.files:
-            return jsonify({"error": "No image uploaded"}), 400
-            
         file = request.files['image']
+        # معالجة الصورة لتناسب مدخلات النموذج (224x224)
         img = Image.open(file.stream).convert('RGB').resize((224, 224))
         img_array = np.array(img, dtype=np.float32) / 255.0
         img_array = np.expand_dims(img_array, axis=0)
 
-        # التنبؤ باستخدام TFLite
+        # تنفيذ التنبؤ
         interpreter.set_tensor(input_details[0]['index'], img_array)
         interpreter.invoke()
         predictions = interpreter.get_tensor(output_details[0]['index'])
@@ -55,25 +59,24 @@ def predict():
         class_idx = np.argmax(predictions[0])
         confidence = float(np.max(predictions[0]))
         
-        # جلب اسم الفئة
-        disease_name = CLASS_NAMES[class_idx]
-
-        # جلب بيانات العلاج باستخدام اسم الفئة
-        result = treatments_data.get(disease_name, {
+        disease_key = CLASS_NAMES[class_idx]
+        
+        # جلب تفاصيل العلاج من ملف JSON
+        result = treatments_data.get(disease_key, {
             "ar_name": "غير معروف",
-            "medicine": "بيانات العلاج غير متوفرة لهذا التشخيص",
+            "medicine": "راجع مختصاً زراعياً",
             "usage": "-",
             "duration": "-"
         })
         
         result['confidence'] = f"{confidence * 100:.1f}%"
-        result['disease_key'] = disease_name
         
         return jsonify(result)
+
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
-    # بورت 10000 هو الافتراضي لـ Render في كثير من الأحيان، لكن 5000 يعمل أيضاً
+    # بورت ديناميكي ليتوافق مع Render
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port)
