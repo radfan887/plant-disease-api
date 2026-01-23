@@ -4,19 +4,18 @@ import json
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from PIL import Image
-import tflite_runtime.interpreter as tflite
+import tensorflow as tf # تم التغيير هنا
 
 app = Flask(__name__)
 CORS(app)
 
-# تحميل النموذج الخفيف TFLite
-# تأكد أن ملف النموذج في GitHub باسم model.tflite
+# تحميل الموديل باستخدام تنسرفلو
 try:
-    interpreter = tflite.Interpreter(model_path="model.tflite")
+    interpreter = tf.lite.Interpreter(model_path="model.tflite")
     interpreter.allocate_tensors()
     input_details = interpreter.get_input_details()
     output_details = interpreter.get_output_details()
-    print("✅ تم تحميل نموذج TFLite بنجاح")
+    print("✅ تم تحميل نموذج TFLite بنجاح عبر TensorFlow")
 except Exception as e:
     print(f"❌ خطأ في تحميل النموذج: {e}")
 
