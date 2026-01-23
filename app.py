@@ -38,7 +38,6 @@ CLASS_NAMES = [
 @app.route('/', methods=['GET'])
 def health_check():
     return jsonify({"status": "online", "message": "Plant Doctor API is ready!"})
-
 @app.route('/predict', methods=['POST'])
 def predict():
     if 'image' not in request.files:
@@ -46,22 +45,29 @@ def predict():
     
     try:
         file = request.files['image']
-        # معالجة الصورة لتناسب مدخلات النموذج (224x224)
         img = Image.open(file.stream).convert('RGB').resize((224, 224))
         img_array = np.array(img, dtype=np.float32) / 255.0
         img_array = np.expand_dims(img_array, axis=0)
 
-        # تنفيذ التنبؤ
         interpreter.set_tensor(input_details[0]['index'], img_array)
         interpreter.invoke()
         predictions = interpreter.get_tensor(output_details[0]['index'])
         
         class_idx = np.argmax(predictions[0])
         confidence = float(np.max(predictions[0]))
+
+        # --- إضافة فحص جودة الصورة هنا ---
+        if confidence < 0.45:  # إذا كانت الدقة أقل من 45% نعتبرها صورة غير معروفة
+            return jsonify({
+                "ar_name": "لم يتم التعرف على النبات",
+                "medicine": "تأكد من تصوير ورقة النبات بوضوح",
+                "usage": "حاول التقاط الصورة في ضوء نهار جيد",
+                "duration": "-",
+                "confidence": f"{confidence * 100:.1f}%"
+            })
+        # ----------------------------------
         
         disease_key = CLASS_NAMES[class_idx]
-        
-        # جلب تفاصيل العلاج من ملف JSON
         result = treatments_data.get(disease_key, {
             "ar_name": "غير معروف",
             "medicine": "راجع مختصاً زراعياً",
@@ -70,7 +76,6 @@ def predict():
         })
         
         result['confidence'] = f"{confidence * 100:.1f}%"
-        
         return jsonify(result)
 
     except Exception as e:
